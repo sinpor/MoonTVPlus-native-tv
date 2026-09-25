@@ -1,0 +1,3 @@
+[submodule "vendor/MoonTVPlus"]
+	path = vendor/MoonTVPlus
+	url = git@github.com:sinpor/MoonTVPlus.git
