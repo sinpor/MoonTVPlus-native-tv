@@ -59,6 +59,11 @@ jobs:
         run: |
           test -n "$KEYSTORE_B64" && test -n "$KEYSTORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/moontv-native-release.jks"
+          if ! keytool -list -keystore "$RUNNER_TEMP/moontv-native-release.jks" \
+            -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" > /dev/null 2>&1; then
+            echo '::error::Release keystore cannot be opened with the configured store password and alias. Check ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, and ANDROID_KEY_ALIAS.'
+            exit 1
+          fi
       - name: Build signed release APK
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/moontv-native-release.jks
