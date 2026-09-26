@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,11 +39,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,10 +59,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -75,6 +81,13 @@ class MainActivity : ComponentActivity() {
 
 private enum class Screen { SERVER, LOGIN, HOME, SEARCH, DETAIL, SETTINGS }
 private enum class HomeTab(val label: String) { HOT("热门推荐"), CONTINUE("继续观看"), FAVORITES("我的收藏") }
+private class SearchState {
+    var query by mutableStateOf("")
+    var results by mutableStateOf<List<SearchGroup>>(emptyList())
+    var message by mutableStateOf("")
+    val grid = LazyGridState()
+    var selectedIndex: Int? = null
+}
 private enum class RecommendationCategory(val label: String) {
     MOVIES("热门电影"), SHORT_DRAMAS("热播短剧"), ANIME("新番放送"), SERIES("热门剧集"), VARIETY("热门综艺")
 }
@@ -115,6 +128,7 @@ private fun MoonApp(api: MoonApi, store: WatchStore) {
     var homeRevision by remember { mutableStateOf(0) }
     var homeTab by remember { mutableStateOf(HomeTab.HOT) }
     val homeState = remember { HomeState() }
+    var searchState by remember { mutableStateOf(SearchState()) }
     var detailOrigin by remember { mutableStateOf(Screen.HOME) }
     var detailFullScreen by remember { mutableStateOf(false) }
 
@@ -160,8 +174,8 @@ private fun MoonApp(api: MoonApi, store: WatchStore) {
                 }
             })
             Screen.LOGIN -> LoginScreen(api, site, message, onLogin = { message = ""; homeRevision++; screen = Screen.HOME }, onError = { message = it }, onServer = { screen = Screen.SERVER })
-            Screen.HOME -> HomeScreen(api, store, site, homeState, homeRevision, homeTab, onTabSelected = { homeTab = it }, onSearch = { screen = Screen.SEARCH }, onSelect = { selected = it; detailOrigin = Screen.HOME; detailFullScreen = false; screen = Screen.DETAIL }, onSettings = { screen = Screen.SETTINGS })
-            Screen.SEARCH -> SearchScreen(api, onSelect = { selected = it; detailOrigin = Screen.SEARCH; detailFullScreen = false; screen = Screen.DETAIL }, onBack = { screen = Screen.HOME })
+            Screen.HOME -> HomeScreen(api, store, site, homeState, homeRevision, homeTab, onTabSelected = { homeTab = it }, onSearch = { searchState = SearchState(); screen = Screen.SEARCH }, onSelect = { selected = it; detailOrigin = Screen.HOME; detailFullScreen = false; screen = Screen.DETAIL }, onSettings = { screen = Screen.SETTINGS })
+            Screen.SEARCH -> SearchScreen(api, searchState, onSelect = { selected = it; detailOrigin = Screen.SEARCH; detailFullScreen = false; screen = Screen.DETAIL }, onBack = { searchState = SearchState(); screen = Screen.HOME })
             Screen.DETAIL -> selected?.let { item -> DetailPlaybackScreen(api, store, item, detailFullScreen, onFullScreen = { detailFullScreen = true }, onBack = { if (detailFullScreen) detailFullScreen = false else { homeRevision++; screen = detailOrigin } }) }
             Screen.SETTINGS -> SettingsScreen(api, store, site, onBack = { screen = Screen.HOME }, onServer = { api.clearLogin(); screen = Screen.SERVER })
         }
@@ -377,14 +391,14 @@ private fun RecommendationTabButton(category: RecommendationCategory, selected: 
 }
 
 @Composable
-private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = null, onClick: () -> Unit) {
+private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = null, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     var imageFailed by remember(item.poster, api.baseUrl) { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.025f else 1f, tween(120), label = "cardFocusScale")
     val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
             .onFocusChanged { focused = it.isFocused }
             .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
@@ -428,60 +442,111 @@ private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = nul
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SearchScreen(api: MoonApi, onSelect: (VideoItem) -> Unit, onBack: () -> Unit) {
+private fun SearchScreen(api: MoonApi, state: SearchState, onSelect: (VideoItem) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
     val queryFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { queryFocus.requestFocus() }
-    var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<SearchGroup>>(emptyList()) }
-    var message by remember { mutableStateOf("") }
+    val searchFocus = remember { FocusRequester() }
     var busy by remember { mutableStateOf(false) }
-    var searchGeneration by remember { mutableIntStateOf(0) }
+    var pendingCardFocus by remember { mutableStateOf(state.selectedIndex) }
+    var pendingButtonFocus by remember { mutableStateOf(false) }
+    val imeVisible = WindowInsets.isImeVisible
+
+    LaunchedEffect(pendingButtonFocus) {
+        if (pendingButtonFocus) {
+            delay(350)
+            searchFocus.requestFocus()
+            pendingButtonFocus = false
+        }
+    }
+
+    BackHandler {
+        if (imeVisible) keyboard?.hide() else onBack()
+    }
+    LaunchedEffect(Unit) {
+        // Only a new session opens the keyboard; returning from detail restores a card.
+        if (state.selectedIndex == null) {
+            queryFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
+
+    fun submitSearch() {
+        keyboard?.hide()
+        pendingButtonFocus = true
+        val submitted = state.query.trim()
+        if (submitted.isEmpty()) return
+        if (busy) return
+        busy = true
+        state.results = emptyList()
+        state.message = "搜索中…"
+        state.selectedIndex = null
+        pendingCardFocus = null
+        scope.launch {
+            try {
+                state.grid.scrollToItem(0)
+                val found = api.search(submitted, api.sources())
+                state.results = groupSearchResults(found)
+                state.message = if (state.results.isEmpty()) "没有找到与「$submitted」匹配的普通点播影片"
+                    else "找到 ${state.results.size} 部作品 · ${found.size} 条源结果"
+                if (state.results.isNotEmpty()) {
+                    pendingButtonFocus = false
+                    pendingCardFocus = 0
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                state.message = e.message ?: "搜索失败"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     Column {
         Heading("搜索点播", "只显示服务端允许的普通点播源")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TvTextField(query, {
-                query = it
-                searchGeneration++
-                results = emptyList()
-                message = ""
-            }, label = { Text("片名") }, singleLine = true,
+            TvTextField(state.query, { state.query = it },
+                label = { Text("片名") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { submitSearch() }),
                 modifier = Modifier.weight(1f).focusRequester(queryFocus))
-            TvButton(onClick = {
-                scope.launch {
-                    val submitted = query.trim()
-                    val generation = ++searchGeneration
-                    busy = true; message = "搜索中…"
-                    try {
-                        val found = api.search(submitted, api.sources())
-                        if (generation == searchGeneration) {
-                            val grouped = groupSearchResults(found)
-                            results = grouped
-                            message = if (grouped.isEmpty()) "没有找到与「$submitted」匹配的普通点播影片" else "找到 ${grouped.size} 部作品 · ${found.size} 条源结果"
-                        }
-                    } catch (e: Exception) { if (generation == searchGeneration) message = e.message ?: "搜索失败" }
-                    busy = false
-                }
-            }, enabled = !busy && query.isNotBlank()) { Text("搜索") }
-            TvButton(onClick = onBack) { Text("返回") }
+            // Keep the loading button focusable so disabling it cannot send focus to the input.
+            TvButton(onClick = { submitSearch() }, modifier = Modifier.focusRequester(searchFocus),
+                enabled = busy || state.query.trim().isNotEmpty()) { Text(if (busy) "搜索中…" else "搜索") }
         }
-        if (message.isNotBlank()) Text(message, color = Color(0xFFADB8CD))
+        if (state.message.isNotBlank()) Text(state.message, color = Color(0xFFADB8CD))
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
+            state = state.grid,
             modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            itemsIndexed(results) { _, group ->
+            itemsIndexed(state.results) { index, group ->
+                val cardFocus = remember { FocusRequester() }
+                LaunchedEffect(pendingCardFocus) {
+                    if (pendingCardFocus == index) {
+                        // Wait until the lazy item is placed before requesting focus.
+                        withFrameNanos { }
+                        cardFocus.requestFocus()
+                        pendingCardFocus = null
+                    }
+                }
                 val item = group.representative
                 val metadata = listOfNotNull(
                     group.year.takeIf { it.isNotBlank() },
                     group.episodeCount.takeIf { it > 0 }?.let { "共${it}集" },
                     "${group.sourceNames.size}个源"
                 ).joinToString(" · ")
-                HomeVideoCard(api, item, metadata) { onSelect(item) }
+                HomeVideoCard(api, item, metadata, Modifier.focusRequester(cardFocus)) {
+                    state.selectedIndex = index
+                    keyboard?.hide()
+                    onSelect(item)
+                }
             }
         }
     }

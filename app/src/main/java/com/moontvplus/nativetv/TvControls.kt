@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -125,7 +126,8 @@ internal fun TvTextField(
     placeholder: @Composable (() -> Unit)? = null,
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(6.dp)
@@ -139,6 +141,7 @@ internal fun TvTextField(
         shape = shape,
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = Color.White, unfocusedTextColor = Color.White,
             focusedLabelColor = Color.White, unfocusedLabelColor = TvStyle.secondaryText,
