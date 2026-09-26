@@ -130,12 +130,26 @@ fun DetailPlaybackScreen(
     var lastInteraction by remember { mutableLongStateOf(0L) }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    var heldSeekKey by remember { mutableIntStateOf(0) }
-    var activeSeekHold by remember { mutableStateOf(false) }
-    var seekGeneration by remember { mutableIntStateOf(0) }
+    var seekSelection by remember(player) { mutableStateOf<SeekSelection?>(null) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
     val hostView = LocalView.current
     var pausedByBackground by remember(player) { mutableStateOf(false) }
+    val seekController = remember(player) {
+        FullscreenSeekController(object : SeekPlayback {
+            override val position get() = player.currentPosition
+            override val duration get() = player.duration
+            override val canSeek get() = player.isCurrentMediaItemSeekable && !resolvingMedia &&
+                !loading && error.isBlank() && !pausedByBackground
+            override val playing get() = player.playWhenReady
+            override fun seekTo(position: Long) { player.seekTo(position) }
+            override fun setPlayWhenReady(playing: Boolean) {
+                player.playWhenReady = playing && !pausedByBackground
+            }
+        }) {
+            seekSelection = it
+            lastInteraction = SystemClock.uptimeMillis()
+        }
+    }
     val recording = remember(player) { mutableStateOf<Pair<VideoItem, Int>?>(null) }
     val recordWrites = remember(player) { Channel<Pair<String, JSONObject>>(Channel.UNLIMITED) }
 
@@ -159,43 +173,24 @@ fun DetailPlaybackScreen(
         durationMs = player.duration
     }
 
-    // Retain the held key until release: repeated native DOWN events cannot restart a cancelled hold.
-    fun stopSeeking() {
-        seekGeneration++
-        activeSeekHold = false
+    fun stopSeeking(restorePlayback: Boolean = true) {
         seekJob?.cancel()
         seekJob = null
+        seekController.cancel(restorePlayback)
         lastInteraction = SystemClock.uptimeMillis()
     }
 
-    fun seekStep(direction: Int): Boolean {
-        val duration = player.duration
-        if (duration <= 0 || !player.isCurrentMediaItemSeekable || resolvingMedia || loading || error.isNotBlank()) return false
-        val end = (duration - 1000L).coerceAtLeast(0L)
-        val current = player.currentPosition.coerceAtLeast(0L)
-        if (direction > 0 && current >= end || direction < 0 && current <= 0) return false
-        val target = (current + direction * 10000L).coerceIn(0L, end)
-        player.seekTo(target)
+    fun startSeeking(direction: Int) {
+        seekJob?.cancel()
+        seekJob = null
+        seekController.press(direction, SystemClock.uptimeMillis())
         showProgress()
-        return target > 0L && target < end
-    }
-
-    fun startSeeking(keyCode: Int) {
-        heldSeekKey = keyCode
-        activeSeekHold = true
-        val generation = seekGeneration
-        val direction = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
-        showProgress()
-        if (!seekStep(direction)) return
+        if (seekController.selection == null) return
         seekJob = scope.launch {
-            try {
-                delay(500)
-                while (seekStep(direction)) delay(250)
-            } finally {
-                if (generation == seekGeneration) {
-                    seekJob = null
-                    lastInteraction = SystemClock.uptimeMillis()
-                }
+            delay(500)
+            while (seekController.selection != null) {
+                seekController.advance(SystemClock.uptimeMillis())
+                delay(250)
             }
         }
     }
@@ -208,15 +203,15 @@ fun DetailPlaybackScreen(
                 player.pause()
                 queueProgressSave()
             }
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) stopSeeking()
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) stopSeeking(restorePlayback = false)
         }
         val windowListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
-            if (!focused) stopSeeking()
+            if (!focused) stopSeeking() else seekController.resetInput()
         }
         owner?.lifecycle?.addObserver(observer)
         hostView.viewTreeObserver.addOnWindowFocusChangeListener(windowListener)
         onDispose {
-            stopSeeking()
+            stopSeeking(restorePlayback = false)
             owner?.lifecycle?.removeObserver(observer)
             if (hostView.viewTreeObserver.isAlive) hostView.viewTreeObserver.removeOnWindowFocusChangeListener(windowListener)
         }
@@ -297,7 +292,7 @@ fun DetailPlaybackScreen(
     }
 
     fun chooseEpisode(index: Int) {
-        stopSeeking()
+        stopSeeking(restorePlayback = false)
         if (index !in active.episodes.indices) return
         queueProgressSave()
         pausedByBackground = false
@@ -309,7 +304,7 @@ fun DetailPlaybackScreen(
     }
 
     fun chooseSource(index: Int) {
-        stopSeeking()
+        stopSeeking(restorePlayback = false)
         val candidate = sources.getOrNull(index) ?: return
         queueProgressSave()
         pausedByBackground = false
@@ -366,7 +361,7 @@ fun DetailPlaybackScreen(
         }
     }
     val pausedForProgress = !playWhenReady && playbackState in listOf(Player.STATE_READY, Player.STATE_BUFFERING) && error.isBlank()
-    val keepProgress = pausedForProgress || menuVisible || panel != FullPanel.NONE || activeSeekHold
+    val keepProgress = pausedForProgress || menuVisible || panel != FullPanel.NONE || seekSelection != null
     LaunchedEffect(fullScreen, keepProgress, lastInteraction) {
         if (!fullScreen) {
             progressVisible = false
@@ -388,11 +383,18 @@ fun DetailPlaybackScreen(
         if (menuVisible || panel != FullPanel.NONE) stopSeeking()
         if (fullScreen) showProgress()
     }
+    LaunchedEffect(loading, resolvingMedia, error, playbackState) {
+        if (seekController.selection == null ||
+            (!loading && !resolvingMedia && error.isBlank() && player.isCurrentMediaItemSeekable && player.duration > 0)) return@LaunchedEffect
+        stopSeeking()
+    }
 
     BackHandler(fullScreen) {
+        val wasSelecting = seekController.selection != null
         stopSeeking()
         showProgress()
         when {
+            wasSelecting -> Unit
             panel != FullPanel.NONE -> panel = FullPanel.NONE
             menuVisible -> menuVisible = false
             else -> onBack()
@@ -411,14 +413,21 @@ fun DetailPlaybackScreen(
 
     if (fullScreen) {
         Box(Modifier.fillMaxSize().focusRequester(fullFocus)
-            .onFocusChanged { if (!it.isFocused) stopSeeking() }
+            .onFocusChanged { if (!it.isFocused) stopSeeking() else seekController.resetInput() }
             .onPreviewKeyEvent { key ->
                 val native = key.nativeKeyEvent
                 val isSeekKey = native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                val seekDirection = if (native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
                 if (native.action == KeyEvent.ACTION_UP) {
-                    if (isSeekKey && heldSeekKey == native.keyCode) {
-                        stopSeeking()
-                        heldSeekKey = 0
+                    if (isSeekKey && seekController.isHeld(seekDirection)) {
+                        seekJob?.cancel()
+                        seekJob = null
+                        if (native.isCanceled) seekController.cancel()
+                        else if (seekController.selection?.longPress == false) {
+                            // A release at the threshold can beat the coroutine's first tick.
+                            seekController.advance(SystemClock.uptimeMillis())
+                        }
+                        seekController.release(seekDirection)
                         showProgress()
                         return@onPreviewKeyEvent true
                     }
@@ -426,7 +435,9 @@ fun DetailPlaybackScreen(
                 }
                 if (native.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 showProgress()
-                if (isSeekKey && heldSeekKey == native.keyCode && native.repeatCount > 0) return@onPreviewKeyEvent true
+                if (isSeekKey && (seekController.isHeld(seekDirection) || native.repeatCount > 0) &&
+                    (!menuVisible && panel == FullPanel.NONE || seekController.isHeld(seekDirection))) return@onPreviewKeyEvent true
+                if (!isSeekKey && native.keyCode != KeyEvent.KEYCODE_BACK) stopSeeking()
                 when (key.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                         if (panel != FullPanel.NONE) {
@@ -458,8 +469,7 @@ fun DetailPlaybackScreen(
                             if (candidate in actions.indices) menuIndex = candidate
                         } else {
                             if (native.repeatCount == 0) {
-                                stopSeeking()
-                                startSeeking(native.keyCode)
+                                startSeeking(step)
                             }
                         }
                         true
@@ -470,7 +480,7 @@ fun DetailPlaybackScreen(
             PlaybackView(player, Modifier.fillMaxSize())
             val paused = !playWhenReady && playbackState in listOf(Player.STATE_READY, Player.STATE_BUFFERING) && error.isBlank()
             val buffering = error.isBlank() && (resolvingMedia || loading || playWhenReady && playbackState == Player.STATE_BUFFERING)
-            if (paused) {
+            if (paused && seekSelection?.longPress != true) {
                 Box(Modifier.align(Alignment.Center).size(88.dp)
                     .background(Color(0xB8000000), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
                     PlaybackIcon(PlaybackGlyph.PAUSE, Modifier.size(42.dp))
@@ -491,8 +501,9 @@ fun DetailPlaybackScreen(
             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9999),
                 modifier = Modifier.align(Alignment.Center).background(Color(0xBB000000)).padding(16.dp))
             if (progressVisible && !menuVisible && panel == FullPanel.NONE) {
-                PlaybackProgress(positionMs, durationMs, Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth().background(Color(0xCC10131D)).padding(24.dp))
+                PlaybackProgress(seekSelection?.target ?: positionMs, durationMs, Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth().background(Color(0xCC10131D)).padding(24.dp),
+                    offset = seekSelection?.let { it.target - it.origin })
             }
             if (menuVisible || panel != FullPanel.NONE) {
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xDD10131D)).padding(16.dp)) {
@@ -653,11 +664,15 @@ private fun playbackTime(milliseconds: Long): String {
 }
 
 @Composable
-private fun PlaybackProgress(position: Long, duration: Long, modifier: Modifier = Modifier) {
-    Column(modifier.semantics { contentDescription = "播放进度 ${playbackTime(position)} / ${playbackTime(if (duration > 0) duration else -1)}" }) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(playbackTime(position), color = Color.White, fontSize = 18.sp)
-            Text(playbackTime(if (duration > 0) duration else -1), color = Color.White, fontSize = 18.sp)
+private fun PlaybackProgress(position: Long, duration: Long, modifier: Modifier = Modifier, offset: Long? = null) {
+    val time = "${playbackTime(position)} / ${playbackTime(if (duration > 0) duration else -1)}"
+    val displacement = offset?.let { (if (it < 0) "−" else "+") + playbackTime(kotlin.math.abs(it)) }
+    Column(modifier.semantics {
+        contentDescription = if (displacement == null) "播放进度 $time" else "定位目标 $time，偏移 $displacement"
+    }) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(time, color = Color.White, fontSize = 18.sp)
+            if (displacement != null) Text(displacement, color = Color(0xFFADB8CD), fontSize = 14.sp)
         }
         Spacer(Modifier.height(8.dp))
         Canvas(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
