@@ -73,6 +73,10 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -131,6 +135,22 @@ fun DetailPlaybackScreen(
     var seekGeneration by remember { mutableIntStateOf(0) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
     val hostView = LocalView.current
+    var pausedByBackground by remember(player) { mutableStateOf(false) }
+    val recording = remember(player) { mutableStateOf<Pair<VideoItem, Int>?>(null) }
+    val recordWrites = remember(player) { Channel<Pair<String, JSONObject>>(Channel.UNLIMITED) }
+
+    fun queueProgressSave() {
+        val currentPosition = player.currentPosition
+        val (video, recordedEpisode) = recording.value ?: return
+        if (currentPosition <= 1000 || video.source.isBlank() || video.id.isBlank()) return
+        recordWrites.trySend("${video.source}+${video.id}" to JSONObject()
+            .put("title", video.title).put("source_name", video.sourceName)
+            .put("year", video.year).put("cover", video.poster)
+            .put("index", recordedEpisode + 1).put("total_episodes", video.episodes.size)
+            .put("play_time", currentPosition / 1000)
+            .put("total_time", player.duration.coerceAtLeast(0) / 1000)
+            .put("save_time", System.currentTimeMillis()))
+    }
 
     fun showProgress() {
         lastInteraction = SystemClock.uptimeMillis()
@@ -183,6 +203,11 @@ fun DetailPlaybackScreen(
     DisposableEffect(player, hostView) {
         val owner = context as? LifecycleOwner
         val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                pausedByBackground = true
+                player.pause()
+                queueProgressSave()
+            }
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) stopSeeking()
         }
         val windowListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
@@ -201,6 +226,13 @@ fun DetailPlaybackScreen(
     val detailGridState = rememberLazyGridState()
 
     DisposableEffect(player) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            for ((key, record) in recordWrites) {
+                try { store.saveRecord(key, record) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { /* Progress saves must not block leaving playback. */ }
+            }
+        }
         val listener = object : Player.Listener {
             override fun onPlayWhenReadyChanged(ready: Boolean, reason: Int) { playWhenReady = ready }
             override fun onPlaybackStateChanged(state: Int) { playbackState = state }
@@ -209,7 +241,12 @@ fun DetailPlaybackScreen(
             }
         }
         player.addListener(listener)
-        onDispose { player.removeListener(listener); player.release() }
+        onDispose {
+            queueProgressSave()
+            recordWrites.close()
+            player.removeListener(listener)
+            player.release()
+        }
     }
 
     LaunchedEffect(item.source, item.id) {
@@ -243,9 +280,10 @@ fun DetailPlaybackScreen(
         try {
             val url = api.resolveEpisode(active.episodes[episode], active.source, active.proxyMode)
             player.setMediaItem(MediaItem.fromUri(url))
+            recording.value = active to episode
             player.prepare()
             if (startTime > 0) player.seekTo(startTime)
-            player.playWhenReady = true
+            if (!pausedByBackground) player.playWhenReady = true
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { error = e.message ?: "无法播放" }
         finally { resolvingMedia = false }
@@ -254,24 +292,15 @@ fun DetailPlaybackScreen(
     LaunchedEffect(active.source, active.id, episode) {
         while (true) {
             delay(10000)
-            if (player.currentPosition > 1000) {
-                try {
-                    store.saveRecord("${active.source}+${active.id}", JSONObject()
-                        .put("title", active.title).put("source_name", active.sourceName)
-                        .put("year", active.year).put("cover", active.poster)
-                        .put("index", episode + 1).put("total_episodes", active.episodes.size)
-                        .put("play_time", player.currentPosition / 1000)
-                        .put("total_time", player.duration.coerceAtLeast(0) / 1000)
-                        .put("save_time", System.currentTimeMillis()))
-                } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { }
-            }
+            queueProgressSave()
         }
     }
 
     fun chooseEpisode(index: Int) {
         stopSeeking()
         if (index !in active.episodes.indices) return
+        queueProgressSave()
+        pausedByBackground = false
         episode = index
         startTime = 0L
         playVersion++
@@ -282,6 +311,8 @@ fun DetailPlaybackScreen(
     fun chooseSource(index: Int) {
         stopSeeking()
         val candidate = sources.getOrNull(index) ?: return
+        queueProgressSave()
+        pausedByBackground = false
         scope.launch {
             loading = true
             try {

@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -75,7 +76,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val api = MoonApi(this)
         val store = WatchStore(this, api)
-        setContent { MaterialTheme { MoonApp(api, store) } }
+        setContent { MaterialTheme { MoonApp(api, store, onExit = ::finish) } }
     }
 }
 
@@ -118,7 +119,7 @@ private val background = Color(0xFF090B14)
 private val fieldHint = TvStyle.secondaryText
 
 @Composable
-private fun MoonApp(api: MoonApi, store: WatchStore) {
+private fun MoonApp(api: MoonApi, store: WatchStore, onExit: () -> Unit) {
     val scope = rememberCoroutineScope()
     var screen by remember { mutableStateOf(if (api.baseUrl.isBlank()) Screen.SERVER else if (api.authCookie.isBlank()) Screen.LOGIN else Screen.HOME) }
     var site by remember { mutableStateOf<SiteConfig?>(null) }
@@ -131,16 +132,24 @@ private fun MoonApp(api: MoonApi, store: WatchStore) {
     var searchState by remember { mutableStateOf(SearchState()) }
     var detailOrigin by remember { mutableStateOf(Screen.HOME) }
     var detailFullScreen by remember { mutableStateOf(false) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
 
     fun goBack() {
         screen = when (screen) {
             Screen.DETAIL -> if (detailFullScreen) { detailFullScreen = false; Screen.DETAIL } else { homeRevision++; detailOrigin }
             Screen.SEARCH, Screen.SETTINGS -> Screen.HOME
-            Screen.HOME -> Screen.HOME
+            Screen.HOME -> { showExitConfirmation = true; Screen.HOME }
             else -> Screen.SERVER
         }
     }
     BackHandler(screen != Screen.SERVER) { goBack() }
+
+    if (showExitConfirmation) {
+        ExitConfirmationDialog(
+            onCancel = { showExitConfirmation = false },
+            onExit = { showExitConfirmation = false; onExit() }
+        )
+    }
 
     LaunchedEffect(api.baseUrl) {
         if (api.baseUrl.isNotBlank()) {
@@ -179,6 +188,24 @@ private fun MoonApp(api: MoonApi, store: WatchStore) {
             Screen.DETAIL -> selected?.let { item -> DetailPlaybackScreen(api, store, item, detailFullScreen, onFullScreen = { detailFullScreen = true }, onBack = { if (detailFullScreen) detailFullScreen = false else { homeRevision++; screen = detailOrigin } }) }
             Screen.SETTINGS -> SettingsScreen(api, store, site, onBack = { screen = Screen.HOME }, onServer = { api.clearLogin(); screen = Screen.SERVER })
         }
+    }
+}
+
+@Composable
+private fun ExitConfirmationDialog(onCancel: () -> Unit, onExit: () -> Unit) {
+    val cancelFocus = remember { FocusRequester() }
+    Dialog(onDismissRequest = onCancel) {
+        Column(
+            Modifier.background(Color(0xFF1B2030), RoundedCornerShape(16.dp)).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("退出 MoonTVPlus？", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TvButton(onClick = onCancel, modifier = Modifier.focusRequester(cancelFocus)) { Text("取消") }
+                TvButton(onClick = onExit) { Text("退出") }
+            }
+        }
+        LaunchedEffect(Unit) { cancelFocus.requestFocus() }
     }
 }
 
