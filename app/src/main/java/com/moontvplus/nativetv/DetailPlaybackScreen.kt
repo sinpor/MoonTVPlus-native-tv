@@ -2,6 +2,10 @@ package com.moontvplus.nativetv
 
 import android.view.KeyEvent
 import android.view.ViewGroup
+import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -65,6 +71,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -115,6 +122,81 @@ fun DetailPlaybackScreen(
     val favoriteFocus = remember { FocusRequester() }
     val episodesTabFocus = remember { FocusRequester() }
     val fullFocus = remember { FocusRequester() }
+    var progressVisible by remember { mutableStateOf(false) }
+    var lastInteraction by remember { mutableLongStateOf(0L) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var heldSeekKey by remember { mutableIntStateOf(0) }
+    var activeSeekHold by remember { mutableStateOf(false) }
+    var seekGeneration by remember { mutableIntStateOf(0) }
+    var seekJob by remember { mutableStateOf<Job?>(null) }
+    val hostView = LocalView.current
+
+    fun showProgress() {
+        lastInteraction = SystemClock.uptimeMillis()
+        progressVisible = true
+        positionMs = player.currentPosition.coerceAtLeast(0)
+        durationMs = player.duration
+    }
+
+    // Retain the held key until release: repeated native DOWN events cannot restart a cancelled hold.
+    fun stopSeeking() {
+        seekGeneration++
+        activeSeekHold = false
+        seekJob?.cancel()
+        seekJob = null
+        lastInteraction = SystemClock.uptimeMillis()
+    }
+
+    fun seekStep(direction: Int): Boolean {
+        val duration = player.duration
+        if (duration <= 0 || !player.isCurrentMediaItemSeekable || resolvingMedia || loading || error.isNotBlank()) return false
+        val end = (duration - 1000L).coerceAtLeast(0L)
+        val current = player.currentPosition.coerceAtLeast(0L)
+        if (direction > 0 && current >= end || direction < 0 && current <= 0) return false
+        val target = (current + direction * 10000L).coerceIn(0L, end)
+        player.seekTo(target)
+        showProgress()
+        return target > 0L && target < end
+    }
+
+    fun startSeeking(keyCode: Int) {
+        heldSeekKey = keyCode
+        activeSeekHold = true
+        val generation = seekGeneration
+        val direction = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
+        showProgress()
+        if (!seekStep(direction)) return
+        seekJob = scope.launch {
+            try {
+                delay(500)
+                while (seekStep(direction)) delay(250)
+            } finally {
+                if (generation == seekGeneration) {
+                    seekJob = null
+                    lastInteraction = SystemClock.uptimeMillis()
+                }
+            }
+        }
+    }
+
+    DisposableEffect(player, hostView) {
+        val owner = context as? LifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) stopSeeking()
+        }
+        val windowListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (!focused) stopSeeking()
+        }
+        owner?.lifecycle?.addObserver(observer)
+        hostView.viewTreeObserver.addOnWindowFocusChangeListener(windowListener)
+        onDispose {
+            stopSeeking()
+            owner?.lifecycle?.removeObserver(observer)
+            if (hostView.viewTreeObserver.isAlive) hostView.viewTreeObserver.removeOnWindowFocusChangeListener(windowListener)
+        }
+    }
+
     val panelGridState = rememberLazyGridState()
     val detailGridState = rememberLazyGridState()
 
@@ -188,6 +270,7 @@ fun DetailPlaybackScreen(
     }
 
     fun chooseEpisode(index: Int) {
+        stopSeeking()
         if (index !in active.episodes.indices) return
         episode = index
         startTime = 0L
@@ -197,6 +280,7 @@ fun DetailPlaybackScreen(
     }
 
     fun chooseSource(index: Int) {
+        stopSeeking()
         val candidate = sources.getOrNull(index) ?: return
         scope.launch {
             loading = true
@@ -238,7 +322,11 @@ fun DetailPlaybackScreen(
     }
 
     LaunchedEffect(fullScreen, active.id) {
-        if (fullScreen) fullFocus.requestFocus()
+        stopSeeking()
+        if (fullScreen) {
+            showProgress()
+            fullFocus.requestFocus()
+        }
         else {
             menuVisible = false
             panel = FullPanel.NONE
@@ -246,7 +334,33 @@ fun DetailPlaybackScreen(
             previewFocus.requestFocus()
         }
     }
+    val pausedForProgress = !playWhenReady && playbackState in listOf(Player.STATE_READY, Player.STATE_BUFFERING) && error.isBlank()
+    val keepProgress = pausedForProgress || menuVisible || panel != FullPanel.NONE || activeSeekHold
+    LaunchedEffect(fullScreen, keepProgress, lastInteraction) {
+        if (!fullScreen) {
+            progressVisible = false
+        } else if (keepProgress) {
+            progressVisible = true
+        } else {
+            delay((3000L - (SystemClock.uptimeMillis() - lastInteraction)).coerceAtLeast(0L))
+            progressVisible = false
+        }
+    }
+    LaunchedEffect(fullScreen, progressVisible) {
+        while (fullScreen && progressVisible) {
+            positionMs = player.currentPosition.coerceAtLeast(0L)
+            durationMs = player.duration
+            delay(200)
+        }
+    }
+    LaunchedEffect(menuVisible, panel, playWhenReady) {
+        if (menuVisible || panel != FullPanel.NONE) stopSeeking()
+        if (fullScreen) showProgress()
+    }
+
     BackHandler(fullScreen) {
+        stopSeeking()
+        showProgress()
         when {
             panel != FullPanel.NONE -> panel = FullPanel.NONE
             menuVisible -> menuVisible = false
@@ -266,8 +380,22 @@ fun DetailPlaybackScreen(
 
     if (fullScreen) {
         Box(Modifier.fillMaxSize().focusRequester(fullFocus)
+            .onFocusChanged { if (!it.isFocused) stopSeeking() }
             .onPreviewKeyEvent { key ->
-                if (key.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                val native = key.nativeKeyEvent
+                val isSeekKey = native.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || native.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                if (native.action == KeyEvent.ACTION_UP) {
+                    if (isSeekKey && heldSeekKey == native.keyCode) {
+                        stopSeeking()
+                        heldSeekKey = 0
+                        showProgress()
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
+                if (native.action != KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                showProgress()
+                if (isSeekKey && heldSeekKey == native.keyCode && native.repeatCount > 0) return@onPreviewKeyEvent true
                 when (key.nativeKeyEvent.keyCode) {
                     KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                         if (panel != FullPanel.NONE) {
@@ -298,7 +426,10 @@ fun DetailPlaybackScreen(
                             while (candidate in actions.indices && !actionEnabled(candidate)) candidate += step
                             if (candidate in actions.indices) menuIndex = candidate
                         } else {
-                            player.seekTo((player.currentPosition + step * 10000).coerceAtLeast(0))
+                            if (native.repeatCount == 0) {
+                                stopSeeking()
+                                startSeeking(native.keyCode)
+                            }
                         }
                         true
                     }
@@ -328,8 +459,14 @@ fun DetailPlaybackScreen(
             }
             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9999),
                 modifier = Modifier.align(Alignment.Center).background(Color(0xBB000000)).padding(16.dp))
+            if (progressVisible && !menuVisible && panel == FullPanel.NONE) {
+                PlaybackProgress(positionMs, durationMs, Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth().background(Color(0xCC10131D)).padding(24.dp))
+            }
             if (menuVisible || panel != FullPanel.NONE) {
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xDD10131D)).padding(16.dp)) {
+                    PlaybackProgress(positionMs, durationMs, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(16.dp))
                     if (panel == FullPanel.NONE) {
                         Text("←/→ 选择操作 · 确定执行 · 返回隐藏菜单", color = Color.White)
                         Spacer(Modifier.height(10.dp))
@@ -472,6 +609,31 @@ fun DetailPlaybackScreen(
                         Text("${source.sourceName.ifBlank { source.source }} · ${source.source}", maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
+            }
+        }
+    }
+}
+
+private fun playbackTime(milliseconds: Long): String {
+    if (milliseconds < 0) return "--:--"
+    val seconds = milliseconds / 1000
+    return if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60)
+        else "%02d:%02d".format(seconds / 60, seconds % 60)
+}
+
+@Composable
+private fun PlaybackProgress(position: Long, duration: Long, modifier: Modifier = Modifier) {
+    Column(modifier.semantics { contentDescription = "播放进度 ${playbackTime(position)} / ${playbackTime(if (duration > 0) duration else -1)}" }) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(playbackTime(position), color = Color.White, fontSize = 18.sp)
+            Text(playbackTime(if (duration > 0) duration else -1), color = Color.White, fontSize = 18.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Canvas(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
+            drawRect(Color(0xFF566077))
+            if (duration > 0) {
+                val fraction = (position.toDouble() / duration).coerceIn(0.0, 1.0).toFloat()
+                drawRect(TvStyle.selectedSurface, size = Size(size.width * fraction, size.height))
             }
         }
     }
