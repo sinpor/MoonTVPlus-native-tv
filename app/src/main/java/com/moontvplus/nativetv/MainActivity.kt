@@ -4,13 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,14 +26,10 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -51,8 +43,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,19 +102,7 @@ private class HomeState {
     }
 }
 private val background = Color(0xFF090B14)
-private val fieldText = Color.White
-private val fieldHint = Color(0xFFADB8CD)
-
-@Composable
-private fun tvTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = fieldText,
-    unfocusedTextColor = fieldText,
-    focusedLabelColor = fieldHint,
-    unfocusedLabelColor = fieldHint,
-    focusedPlaceholderColor = fieldHint,
-    unfocusedPlaceholderColor = fieldHint,
-    cursorColor = fieldText
-)
+private val fieldHint = TvStyle.secondaryText
 
 @Composable
 private fun MoonApp(api: MoonApi, store: WatchStore) {
@@ -195,11 +181,14 @@ private fun Heading(title: String, subtitle: String = "") {
 private fun ServerScreen(current: String, message: String, busy: Boolean, onConnect: (String) -> Unit) {
     var url by remember(current) { mutableStateOf(current) }
     var allowHttp by remember { mutableStateOf(false) }
+    val urlFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { urlFocus.requestFocus() }
     val lan = remember { LanAddressInput { url = it } }
     DisposableEffect(lan) { lan.start(); onDispose { lan.stop() } }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
         Heading("连接 MoonTVPlus", "输入你自己部署的服务地址")
-        OutlinedTextField(url, { url = it }, label = { Text("服务地址") }, placeholder = { Text("https://example.com") }, singleLine = true, colors = tvTextFieldColors(), modifier = Modifier.fillMaxWidth())
+        TvTextField(url, { url = it }, label = { Text("服务地址") }, placeholder = { Text("https://example.com") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().focusRequester(urlFocus))
         Spacer(Modifier.height(14.dp))
         lan.url?.let { link ->
             Text("也可用同一局域网的手机扫码输入服务地址", color = Color.White)
@@ -207,10 +196,10 @@ private fun ServerScreen(current: String, message: String, busy: Boolean, onConn
         } ?: Text("当前网络无法提供手机辅助输入，请使用电视键盘输入。", color = Color(0xFFADB8CD))
         if (url.startsWith("http://")) {
             Text("HTTP 会明文传输登录凭据。请确认这是你信任的网络。", color = Color(0xFFFFBC7A))
-            Button(onClick = { allowHttp = !allowHttp }) { Text(if (allowHttp) "已允许 HTTP" else "允许连接 HTTP") }
+            TvButton(onClick = { allowHttp = !allowHttp }) { Text(if (allowHttp) "已允许 HTTP" else "允许连接 HTTP") }
         }
         Spacer(Modifier.height(14.dp))
-        Button(onClick = { onConnect(url) }, enabled = !busy && (url.startsWith("https://") || url.startsWith("http://") && allowHttp)) { Text("连接服务") }
+        TvButton(onClick = { onConnect(url) }, enabled = !busy && (url.startsWith("https://") || url.startsWith("http://") && allowHttp)) { Text("连接服务") }
         if (message.isNotBlank()) Text(message, color = Color(0xFFFFBC7A))
     }
 }
@@ -218,6 +207,8 @@ private fun ServerScreen(current: String, message: String, busy: Boolean, onConn
 @Composable
 private fun LoginScreen(api: MoonApi, site: SiteConfig?, error: String, onLogin: () -> Unit, onError: (String) -> Unit, onServer: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val refreshFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { refreshFocus.requestFocus() }
     var qr by remember { mutableStateOf<QrSession?>(null) }
     var status by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
@@ -247,22 +238,23 @@ private fun LoginScreen(api: MoonApi, site: SiteConfig?, error: String, onLogin:
             catch (e: Exception) { onError(e.message ?: "查询扫码状态失败") }
         }
     }
-    Column {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Heading("登录 ${site?.name ?: "MoonTVPlus"}", api.baseUrl)
         qr?.let { QrCode(it.url, Modifier.width(245.dp).height(245.dp)) }
         Text(status, color = Color.White)
         if (error.isNotBlank()) Text(error, color = Color(0xFFFF8C8C))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { scope.launch { try { qr = api.createQr() } catch (e: Exception) { onError(e.message ?: "刷新失败") } } }) { Text("刷新二维码") }
-            Button(onClick = { showPassword = !showPassword }) { Text("账号密码备用登录") }
-            Button(onClick = onServer) { Text("更换服务") }
+            TvButton(onClick = { scope.launch { try { qr = api.createQr() } catch (e: Exception) { onError(e.message ?: "刷新失败") } } },
+                modifier = Modifier.focusRequester(refreshFocus)) { Text("刷新二维码") }
+            TvButton(onClick = { showPassword = !showPassword }) { Text("账号密码备用登录") }
+            TvButton(onClick = onServer) { Text("更换服务") }
         }
         if (showPassword) {
             if (site?.turnstile == true) Text("此服务启用了人机验证，请在手机网页登录后扫码确认。", color = Color(0xFFFFBC7A))
             else {
-                if (site?.storageType != "localstorage") OutlinedTextField(user, { user = it }, label = { Text("用户名") }, colors = tvTextFieldColors())
-                OutlinedTextField(password, { password = it }, label = { Text("密码") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), colors = tvTextFieldColors())
-                Button(enabled = !busy, onClick = {
+                if (site?.storageType != "localstorage") TvTextField(user, { user = it }, label = { Text("用户名") })
+                TvTextField(password, { password = it }, label = { Text("密码") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                TvButton(enabled = !busy, onClick = {
                     scope.launch {
                         busy = true
                         try { api.passwordLogin(user, password, site?.storageType == "localstorage"); onLogin() }
@@ -322,8 +314,8 @@ private fun HomeScreen(api: MoonApi, store: WatchStore, site: SiteConfig?, state
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Text(site?.name ?: "MoonTVPlus", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onSearch) { Text("搜索") }
-            Button(onClick = onSettings) { Text("设置") }
+            TvButton(onClick = onSearch) { Text("搜索") }
+            TvButton(onClick = onSettings) { Text("设置") }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -356,7 +348,7 @@ private fun HomeScreen(api: MoonApi, store: WatchStore, site: SiteConfig?, state
                 columns = GridCells.Fixed(3),
                 state = gridState,
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(bottom = 12.dp),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -368,19 +360,19 @@ private fun HomeScreen(api: MoonApi, store: WatchStore, site: SiteConfig?, state
 
 @Composable
 private fun HomeTabButton(tab: HomeTab, selected: Boolean, onClick: () -> Unit) {
-    Button(
+    TvButton(
         onClick = onClick,
-        modifier = Modifier.onFocusChanged { if (it.isFocused && !selected) onClick() },
-        colors = ButtonDefaults.buttonColors(containerColor = if (selected) Color(0xFF6955AA) else Color(0xFF252B3D))
+        selected = selected,
+        onFocused = { if (!selected) onClick() }
     ) { Text(tab.label, color = Color.White) }
 }
 
 @Composable
 private fun RecommendationTabButton(category: RecommendationCategory, selected: Boolean, onClick: () -> Unit) {
-    Button(
+    TvButton(
         onClick = onClick,
-        modifier = Modifier.onFocusChanged { if (it.isFocused && !selected) onClick() },
-        colors = ButtonDefaults.buttonColors(containerColor = if (selected) Color(0xFF6955AA) else Color(0xFF252B3D))
+        selected = selected,
+        onFocused = { if (!selected) onClick() }
     ) { Text(category.label, color = Color.White) }
 }
 
@@ -388,11 +380,17 @@ private fun RecommendationTabButton(category: RecommendationCategory, selected: 
 private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = null, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     var imageFailed by remember(item.poster, api.baseUrl) { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.025f else 1f, tween(120), label = "cardFocusScale")
+    val shape = RoundedCornerShape(12.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
-            .then(if (focused) Modifier.border(BorderStroke(2.dp, Color.White), RoundedCornerShape(12.dp)) else Modifier),
-        colors = CardDefaults.cardColors(containerColor = if (focused) Color(0xFF323C58) else Color(0xFF1D2436))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .zIndex(if (focused) 1f else 0f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .tvFocusBorder(focused, shape),
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = if (focused) TvStyle.focusedSurface else Color(0xFF1D2436))
     ) {
         Box(Modifier.fillMaxWidth().height(132.dp)) {
             Row(Modifier.fillMaxSize().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -433,6 +431,8 @@ private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = nul
 @Composable
 private fun SearchScreen(api: MoonApi, onSelect: (VideoItem) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val queryFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { queryFocus.requestFocus() }
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchGroup>>(emptyList()) }
     var message by remember { mutableStateOf("") }
@@ -441,13 +441,14 @@ private fun SearchScreen(api: MoonApi, onSelect: (VideoItem) -> Unit, onBack: ()
     Column {
         Heading("搜索点播", "只显示服务端允许的普通点播源")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(query, {
+            TvTextField(query, {
                 query = it
                 searchGeneration++
                 results = emptyList()
                 message = ""
-            }, label = { Text("片名") }, singleLine = true, colors = tvTextFieldColors(), modifier = Modifier.weight(1f))
-            Button(onClick = {
+            }, label = { Text("片名") }, singleLine = true,
+                modifier = Modifier.weight(1f).focusRequester(queryFocus))
+            TvButton(onClick = {
                 scope.launch {
                     val submitted = query.trim()
                     val generation = ++searchGeneration
@@ -463,13 +464,13 @@ private fun SearchScreen(api: MoonApi, onSelect: (VideoItem) -> Unit, onBack: ()
                     busy = false
                 }
             }, enabled = !busy && query.isNotBlank()) { Text("搜索") }
-            Button(onClick = onBack) { Text("返回") }
+            TvButton(onClick = onBack) { Text("返回") }
         }
         if (message.isNotBlank()) Text(message, color = Color(0xFFADB8CD))
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(bottom = 12.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -490,26 +491,28 @@ private fun SearchScreen(api: MoonApi, onSelect: (VideoItem) -> Unit, onBack: ()
 private fun SettingsScreen(api: MoonApi, store: WatchStore, site: SiteConfig?, onBack: () -> Unit, onServer: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val serverFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { serverFocus.requestFocus() }
     val updater = remember { Updater(context) }
     var release by remember { mutableStateOf<ReleaseInfo?>(null) }
     var downloaded by remember { mutableStateOf<java.io.File?>(null) }
     var updateMessage by remember { mutableStateOf("") }
-    Column {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Heading("设置")
         Text("服务：${api.baseUrl}", color = Color.White)
         Text("服务版本：${site?.version ?: "未知"}", color = Color.White)
         Text("数据模式：${site?.storageType ?: "未知"}", color = Color.White)
         if (site?.storageType == "localstorage") Text("收藏和播放记录只保存在这台电视，无法与网页同步。", color = Color(0xFFFFBC7A))
-        Button(onClick = onServer) { Text("更换服务") }
-        Button(onClick = { store.clearCurrentLocal() }) { Text("清除当前用户本机记录") }
-        Button(onClick = {
+        TvButton(onClick = onServer, modifier = Modifier.focusRequester(serverFocus)) { Text("更换服务") }
+        TvButton(onClick = { store.clearCurrentLocal() }) { Text("清除当前用户本机记录") }
+        TvButton(onClick = {
             scope.launch {
                 updateMessage = "正在检查更新…"
                 try { release = updater.latest(); updateMessage = if (release == null) "已经是最新版本" else "发现新版本 ${release!!.version}" }
                 catch (e: Exception) { updateMessage = e.message ?: "检查更新失败" }
             }
         }) { Text("检查更新") }
-        release?.let { available -> Button(onClick = {
+        release?.let { available -> TvButton(onClick = {
             scope.launch {
                 updateMessage = "正在下载更新…"
                 try {
@@ -520,9 +523,9 @@ private fun SettingsScreen(api: MoonApi, store: WatchStore, site: SiteConfig?, o
                 } catch (e: Exception) { updateMessage = e.message ?: "下载失败" }
             }
         }) { Text("下载并安装 ${available.version}") } }
-        downloaded?.let { file -> Button(onClick = { updater.install(file) }) { Text("重新打开安装界面") } }
+        downloaded?.let { file -> TvButton(onClick = { updater.install(file) }) { Text("重新打开安装界面") } }
         if (updateMessage.isNotBlank()) Text(updateMessage, color = Color(0xFFFFBC7A))
-        Button(onClick = onBack) { Text("返回") }
+        TvButton(onClick = onBack) { Text("返回") }
     }
 }
 

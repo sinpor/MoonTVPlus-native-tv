@@ -3,15 +3,14 @@ package com.moontvplus.nativetv
 import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,8 +25,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,6 +50,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Offset
@@ -111,7 +111,6 @@ fun DetailPlaybackScreen(
     var panel by remember { mutableStateOf(FullPanel.NONE) }
     var panelIndex by remember { mutableIntStateOf(0) }
     var previewFocused by remember { mutableStateOf(false) }
-    var favoriteFocused by remember { mutableStateOf(false) }
     val previewFocus = remember { FocusRequester() }
     val favoriteFocus = remember { FocusRequester() }
     val episodesTabFocus = remember { FocusRequester() }
@@ -355,7 +354,11 @@ fun DetailPlaybackScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             itemsIndexed(labels) { index, label ->
-                                ActionChip(label, panelIndex == index, modifier = Modifier.fillMaxWidth()) {
+                                val current = if (panel == FullPanel.EPISODES) episode == index
+                                    else sources[index].let { it.source == active.source && it.id == active.id }
+                                ActionChip(label, panelIndex == index, current = current,
+                                    marker = if (panel == FullPanel.EPISODES) CurrentMarker.EPISODE else CurrentMarker.SOURCE,
+                                    modifier = Modifier.fillMaxWidth()) {
                                     panelIndex = index
                                     if (panel == FullPanel.EPISODES) chooseEpisode(index) else chooseSource(index)
                                 }
@@ -368,6 +371,7 @@ fun DetailPlaybackScreen(
     } else {
         LazyVerticalGrid(columns = GridCells.Fixed(GRID_COLUMNS), state = detailGridState,
             modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -385,11 +389,11 @@ fun DetailPlaybackScreen(
                                     onFullScreen(); true
                                 } else false
                             }.focusable()
-                            .border(BorderStroke(if (previewFocused) 3.dp else 1.dp,
-                                if (previewFocused) Color.White else Color(0xFF444B61)), RoundedCornerShape(10.dp))) {
+                            .tvFocusBorder(previewFocused, RoundedCornerShape(10.dp))
+                            .padding(TvStyle.focusWidth).clip(RoundedCornerShape(7.dp))) {
                             PlaybackView(player, Modifier.fillMaxSize())
                             Text("确定 · 全屏播放", color = Color.White, modifier = Modifier.align(Alignment.BottomStart)
-                                .background(Color(0x99000000)).padding(10.dp))
+                                .background(if (previewFocused) TvStyle.focusedSurface else Color(0x99000000)).padding(10.dp))
                             if (loading) Text("正在测速并加载预览…", color = Color.White,
                                 modifier = Modifier.align(Alignment.Center).background(Color(0xBB000000)).padding(12.dp))
                             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9999),
@@ -416,13 +420,12 @@ fun DetailPlaybackScreen(
                                         maxLines = 3, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            Box(modifier = Modifier.focusRequester(favoriteFocus)
-                                .focusProperties { left = previewFocus; down = episodesTabFocus }
-                                .onFocusChanged { favoriteFocused = it.isFocused }
-                                .width(132.dp).height(48.dp)
-                                .background(Color(0xFF6955AA), RoundedCornerShape(50))
-                                .border(BorderStroke(2.dp, if (favoriteFocused) Color.White else Color.Transparent), RoundedCornerShape(50))
-                                .clickable {
+                            TvButton(
+                                modifier = Modifier.focusRequester(favoriteFocus)
+                                    .focusProperties { left = previewFocus; down = episodesTabFocus }
+                                .width(148.dp).height(48.dp),
+                                selected = favorite,
+                                onClick = {
                                     scope.launch {
                                         try {
                                             val key = "${active.source}+${active.id}"
@@ -436,32 +439,36 @@ fun DetailPlaybackScreen(
                                             }
                                         } catch (e: Exception) { error = e.message ?: "收藏失败" }
                                     }
-                                }, contentAlignment = Alignment.Center) {
-                                Text(if (favorite) "取消收藏" else "收藏", color = Color.White, fontSize = 16.sp)
+                                }) {
+                                Text(if (favorite) "取消收藏" else "收藏", fontSize = 16.sp)
                             }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = { detailTab = DetailTab.EPISODES }, modifier = Modifier.focusRequester(episodesTabFocus),
-                            colors = ButtonDefaults.buttonColors(containerColor = if (detailTab == DetailTab.EPISODES) Color(0xFF6955AA) else Color(0xFF252B3D))) { Text("选集") }
-                        Button(onClick = { detailTab = DetailTab.SOURCES },
-                            colors = ButtonDefaults.buttonColors(containerColor = if (detailTab == DetailTab.SOURCES) Color(0xFF6955AA) else Color(0xFF252B3D))) { Text("选源") }
+                        TvButton(onClick = { detailTab = DetailTab.EPISODES }, modifier = Modifier.focusRequester(episodesTabFocus),
+                            selected = detailTab == DetailTab.EPISODES) { Text("选集") }
+                        TvButton(onClick = { detailTab = DetailTab.SOURCES }, selected = detailTab == DetailTab.SOURCES) { Text("选源") }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
             }
             if (detailTab == DetailTab.EPISODES) {
                 itemsIndexed(active.episodes) { index, _ ->
-                    Button(onClick = { chooseEpisode(index) }, modifier = Modifier.fillMaxWidth().height(68.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (episode == index) Color(0xFF6955AA) else Color(0xFF252B3D))) {
+                    TvButton(onClick = { chooseEpisode(index) },
+                        modifier = Modifier.fillMaxWidth().height(68.dp)
+                            .semantics { if (episode == index) stateDescription = "当前播放集" },
+                        selected = episode == index, marker = CurrentMarker.EPISODE) {
                         Text("${index + 1}. ${active.episodeTitles.getOrNull(index) ?: "第 ${index + 1} 集"}", maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
             } else {
                 itemsIndexed(sources) { index, source ->
-                    Button(onClick = { chooseSource(index) }, modifier = Modifier.fillMaxWidth().height(68.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (source.source == active.source && source.id == active.id) Color(0xFF6955AA) else Color(0xFF252B3D))) {
+                    TvButton(onClick = { chooseSource(index) },
+                        modifier = Modifier.fillMaxWidth().height(68.dp)
+                            .semantics { if (source.source == active.source && source.id == active.id) stateDescription = "当前播放源" },
+                        selected = source.source == active.source && source.id == active.id,
+                        marker = CurrentMarker.SOURCE) {
                         Text("${source.sourceName.ifBlank { source.source }} · ${source.source}", maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -484,9 +491,26 @@ private fun PlaybackView(player: ExoPlayer, modifier: Modifier) {
 }
 
 @Composable
-private fun ActionChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.background(if (selected) Color(0xFF6955AA) else Color(0xFF30374A), RoundedCornerShape(8.dp))
-        .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
+private fun ActionChip(
+    label: String,
+    focused: Boolean,
+    modifier: Modifier = Modifier,
+    current: Boolean = false,
+    marker: CurrentMarker? = null,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(modifier.background(TvStyle.container(focused, current), shape)
+        .tvFocusBorder(focused, shape)
+        // The full-screen parent owns D-pad navigation; children remain clickable by touch.
+        .focusProperties { canFocus = false }
+        .semantics {
+            selected = current
+            if (current) stateDescription = if (marker == CurrentMarker.EPISODE) "当前播放集" else "当前播放源"
+        }
+        .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (current && marker != null) CurrentStateMarker(marker)
         Text(label, color = Color.White, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -495,7 +519,7 @@ private fun ActionChip(label: String, selected: Boolean, modifier: Modifier = Mo
 private fun PlaybackActionChip(
     index: Int,
     isPlaying: Boolean,
-    selected: Boolean,
+    focused: Boolean,
     enabled: Boolean,
     label: String,
     onClick: () -> Unit
@@ -506,8 +530,9 @@ private fun PlaybackActionChip(
         else -> PlaybackGlyph.NEXT
     }
     Box(Modifier.size(58.dp)
-        .background(if (!enabled) Color(0xFF222733) else if (selected) Color(0xFF6955AA) else Color(0xFF30374A),
-            RoundedCornerShape(8.dp))
+        .background(TvStyle.container(focused, enabled = enabled), RoundedCornerShape(8.dp))
+        .tvFocusBorder(focused && enabled, RoundedCornerShape(8.dp))
+        .focusProperties { canFocus = false }
         .semantics {
             contentDescription = if (index == 0) (if (isPlaying) "暂停" else "播放") else label
             if (!enabled) disabled()
