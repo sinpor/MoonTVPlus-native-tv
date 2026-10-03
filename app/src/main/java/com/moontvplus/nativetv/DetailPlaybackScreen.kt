@@ -109,7 +109,10 @@ fun DetailPlaybackScreen(
     var sources by remember(item.source, item.id) { mutableStateOf<List<VideoItem>>(emptyList()) }
     var episode by remember(item.source, item.id) { mutableIntStateOf(0) }
     var startTime by remember(item.source, item.id) { mutableStateOf(0L) }
-    var playVersion by remember(item.source, item.id) { mutableIntStateOf(0) }
+    val playbackController = remember(player) { EpisodePlaybackController() }
+    var playRequestId by remember(player) { mutableStateOf<String?>(null) }
+    var mediaRequestReady by remember(player) { mutableStateOf(false) }
+    var sourceJob by remember(player) { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var playWhenReady by remember { mutableStateOf(false) }
@@ -133,17 +136,16 @@ fun DetailPlaybackScreen(
     var seekSelection by remember(player) { mutableStateOf<SeekSelection?>(null) }
     var seekJob by remember { mutableStateOf<Job?>(null) }
     val hostView = LocalView.current
-    var pausedByBackground by remember(player) { mutableStateOf(false) }
     val seekController = remember(player) {
         FullscreenSeekController(object : SeekPlayback {
             override val position get() = player.currentPosition
             override val duration get() = player.duration
             override val canSeek get() = player.isCurrentMediaItemSeekable && !resolvingMedia &&
-                !loading && error.isBlank() && !pausedByBackground
+                !loading && error.isBlank() && playbackController.mayPlay
             override val playing get() = player.playWhenReady
             override fun seekTo(position: Long) { player.seekTo(position) }
             override fun setPlayWhenReady(playing: Boolean) {
-                player.playWhenReady = playing && !pausedByBackground
+                player.playWhenReady = playing && playbackController.mayPlay
             }
         }) {
             seekSelection = it
@@ -153,10 +155,11 @@ fun DetailPlaybackScreen(
     val recording = remember(player) { mutableStateOf<Pair<VideoItem, Int>?>(null) }
     val recordWrites = remember(player) { Channel<Pair<String, JSONObject>>(Channel.UNLIMITED) }
 
-    fun queueProgressSave() {
-        val currentPosition = player.currentPosition
+    fun queueProgressSave(includeStart: Boolean = false) {
+        if (!playbackController.canSaveProgress(player.currentMediaItem?.mediaId)) return
+        val currentPosition = player.currentPosition.coerceAtLeast(0L)
         val (video, recordedEpisode) = recording.value ?: return
-        if (currentPosition <= 1000 || video.source.isBlank() || video.id.isBlank()) return
+        if ((!includeStart && currentPosition <= 1000) || video.source.isBlank() || video.id.isBlank()) return
         recordWrites.trySend("${video.source}+${video.id}" to JSONObject()
             .put("title", video.title).put("source_name", video.sourceName)
             .put("year", video.year).put("cover", video.poster)
@@ -195,14 +198,79 @@ fun DetailPlaybackScreen(
         }
     }
 
+    fun chooseEpisode(index: Int, automatic: Boolean = false) {
+        if (index !in active.episodes.indices) return
+        stopSeeking(restorePlayback = false)
+        queueProgressSave(includeStart = automatic)
+        player.pause()
+        sourceJob?.cancel()
+        sourceJob = null
+        loading = false
+        if (!automatic) playbackController.allowManualPlayback()
+        episode = index
+        startTime = 0L
+        error = ""
+        resolvingMedia = true
+        mediaRequestReady = true
+        playRequestId = playbackController.beginRequest()
+        if (!automatic) {
+            panel = FullPanel.NONE
+            menuVisible = false
+        }
+    }
+
+    fun chooseSource(index: Int) {
+        val candidate = sources.getOrNull(index) ?: return
+        stopSeeking(restorePlayback = false)
+        queueProgressSave()
+        player.pause()
+        sourceJob?.cancel()
+        playbackController.allowManualPlayback()
+        val requestId = playbackController.beginRequest()
+        playRequestId = requestId
+        mediaRequestReady = false
+        resolvingMedia = false
+        loading = true
+        error = ""
+        val requestedEpisode = episode
+        val work = active
+        sourceJob = scope.launch {
+            try {
+                val next = api.detail(candidate.source, candidate.id)
+                require(sameWork(work, next) && next.episodes.isNotEmpty()) { "此播放源没有可用选集" }
+                val nextFavorite = store.favorites().has("${next.source}+${next.id}")
+                if (!playbackController.isCurrent(requestId)) return@launch
+                active = next
+                episode = requestedEpisode.coerceAtMost(next.episodes.lastIndex)
+                startTime = 0L
+                favorite = nextFavorite
+                mediaRequestReady = true
+                panel = FullPanel.NONE
+                menuVisible = false
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (playbackController.isCurrent(requestId)) error = e.message ?: "换源失败"
+            } finally {
+                if (playbackController.isCurrent(requestId)) loading = false
+            }
+        }
+    }
+
+    fun togglePlayback() {
+        if (player.playWhenReady) player.pause()
+        else if (error.isBlank() && playbackController.allowManualPlayback() &&
+            playbackController.isCurrent(player.currentMediaItem?.mediaId)) player.play()
+    }
+
     DisposableEffect(player, hostView) {
         val owner = context as? LifecycleOwner
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                pausedByBackground = true
+                playbackController.onBackground()
                 player.pause()
                 queueProgressSave()
             }
+            if (event == Lifecycle.Event.ON_RESUME) playbackController.onForeground()
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) stopSeeking(restorePlayback = false)
         }
         val windowListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
@@ -230,14 +298,38 @@ fun DetailPlaybackScreen(
         }
         val listener = object : Player.Listener {
             override fun onPlayWhenReadyChanged(ready: Boolean, reason: Int) { playWhenReady = ready }
-            override fun onPlaybackStateChanged(state: Int) { playbackState = state }
+            override fun onPlaybackStateChanged(state: Int) {
+                playbackState = state
+                if (state != Player.STATE_ENDED || error.isNotBlank()) return
+                val recorded = recording.value ?: return
+                val next = playbackController.nextEpisodeOnEnd(
+                    player.currentMediaItem?.mediaId, recorded.second, recorded.first.episodes.size
+                )
+                if (next != null) chooseEpisode(next, automatic = true)
+                else if (playbackController.isCurrent(player.currentMediaItem?.mediaId)) {
+                    queueProgressSave(includeStart = true)
+                    player.pause()
+                }
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!isPlaying) return
+                if (!playbackController.mayPlay) {
+                    player.pause()
+                    return
+                }
+                if (playbackController.onPlaying(player.currentMediaItem?.mediaId)) queueProgressSave(includeStart = true)
+            }
             override fun onPlayerError(exception: androidx.media3.common.PlaybackException) {
-                error = exception.message ?: "播放失败"
+                if (playbackController.isCurrent(player.currentMediaItem?.mediaId)) {
+                    error = exception.message ?: "播放失败"
+                    player.pause()
+                }
             }
         }
         player.addListener(listener)
         onDispose {
             queueProgressSave()
+            playbackController.beginRequest() // Invalidate any load that completes after leaving.
             recordWrites.close()
             player.removeListener(listener)
             player.release()
@@ -245,6 +337,7 @@ fun DetailPlaybackScreen(
     }
 
     LaunchedEffect(item.source, item.id) {
+        val requestId = playbackController.beginRequest()
         loading = true
         try {
             val allowed = api.sources()
@@ -254,34 +347,50 @@ fun DetailPlaybackScreen(
                     ?: error("没有找到可播放的普通点播源")
             val record = store.records().optJSONObject("${initial.source}+${initial.id}")
             val resumeEpisode = ((record?.optInt("index", 1) ?: 1) - 1).coerceAtLeast(0)
+            if (!playbackController.isCurrent(requestId)) return@LaunchedEffect
             sources = (matching + initial).distinctBy { it.source to it.id }.filter { sameWork(initial, it) }
             val selected = SourceSelector(api).fastest(sources, resumeEpisode) ?: initial
-            active = if (selected.episodes.isNotEmpty()) selected else api.detail(selected.source, selected.id)
+            val video = if (selected.episodes.isNotEmpty()) selected else api.detail(selected.source, selected.id)
+            val initialFavorite = store.favorites().has("${video.source}+${video.id}")
+            if (!playbackController.isCurrent(requestId)) return@LaunchedEffect
+            active = video
             episode = resumeEpisode.coerceAtMost((active.episodes.size - 1).coerceAtLeast(0))
             startTime = if (active.source == initial.source && active.id == initial.id) {
                 (record?.optLong("play_time", 0) ?: 0) * 1000L
             } else 0L
-            favorite = store.favorites().has("${active.source}+${active.id}")
-            playVersion++
+            favorite = initialFavorite
+            mediaRequestReady = true
+            playRequestId = requestId
         } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = e.message ?: "详情加载失败" }
-        finally { loading = false }
+        catch (e: Exception) {
+            if (playbackController.isCurrent(requestId)) error = e.message ?: "详情加载失败"
+        } finally {
+            if (playbackController.isCurrent(requestId)) loading = false
+        }
     }
 
-    LaunchedEffect(active.source, active.id, episode, playVersion) {
-        if (playVersion == 0 || active.episodes.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(active.source, active.id, episode, playRequestId, mediaRequestReady) {
+        val requestId = playRequestId ?: return@LaunchedEffect
+        if (!mediaRequestReady || active.episodes.isEmpty() || !playbackController.isCurrent(requestId)) return@LaunchedEffect
+        val video = active
+        val requestedEpisode = episode
+        val resumePosition = startTime
         error = ""
         resolvingMedia = true
         try {
-            val url = api.resolveEpisode(active.episodes[episode], active.source, active.proxyMode)
-            player.setMediaItem(MediaItem.fromUri(url))
-            recording.value = active to episode
+            val url = api.resolveEpisode(video.episodes[requestedEpisode], video.source, video.proxyMode)
+            if (!playbackController.isCurrent(requestId)) return@LaunchedEffect
+            player.setMediaItem(MediaItem.Builder().setUri(url).setMediaId(requestId).build())
+            recording.value = video to requestedEpisode
             player.prepare()
-            if (startTime > 0) player.seekTo(startTime)
-            if (!pausedByBackground) player.playWhenReady = true
+            if (resumePosition > 0) player.seekTo(resumePosition)
+            player.playWhenReady = playbackController.mayPlay
         } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = e.message ?: "无法播放" }
-        finally { resolvingMedia = false }
+        catch (e: Exception) {
+            if (playbackController.isCurrent(requestId)) error = e.message ?: "无法播放"
+        } finally {
+            if (playbackController.isCurrent(requestId)) resolvingMedia = false
+        }
     }
 
     LaunchedEffect(active.source, active.id, episode) {
@@ -291,45 +400,9 @@ fun DetailPlaybackScreen(
         }
     }
 
-    fun chooseEpisode(index: Int) {
-        stopSeeking(restorePlayback = false)
-        if (index !in active.episodes.indices) return
-        queueProgressSave()
-        pausedByBackground = false
-        episode = index
-        startTime = 0L
-        playVersion++
-        panel = FullPanel.NONE
-        menuVisible = false
-    }
-
-    fun chooseSource(index: Int) {
-        stopSeeking(restorePlayback = false)
-        val candidate = sources.getOrNull(index) ?: return
-        queueProgressSave()
-        pausedByBackground = false
-        scope.launch {
-            loading = true
-            try {
-                val next = api.detail(candidate.source, candidate.id)
-                require(sameWork(active, next) && next.episodes.isNotEmpty()) { "此播放源没有可用选集" }
-                active = next
-                episode = episode.coerceAtMost(next.episodes.lastIndex)
-                startTime = 0L
-                playVersion++
-                favorite = store.favorites().has("${next.source}+${next.id}")
-                error = ""
-                panel = FullPanel.NONE
-                menuVisible = false
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message ?: "换源失败" }
-            finally { loading = false }
-        }
-    }
-
     fun runAction(index: Int) {
         when (index) {
-            0 -> if (player.playWhenReady) player.pause() else player.play()
+            0 -> togglePlayback()
             1 -> if (episode > 0) chooseEpisode(episode - 1)
             2 -> if (episode + 1 < active.episodes.size) chooseEpisode(episode + 1)
             3 -> { panel = FullPanel.EPISODES; panelIndex = episode }
@@ -341,10 +414,6 @@ fun DetailPlaybackScreen(
         1 -> episode > 0
         2 -> episode + 1 < active.episodes.size
         else -> true
-    }
-
-    LaunchedEffect(episode, active.episodes.size) {
-        if (!actionEnabled(menuIndex)) menuIndex = 0
     }
 
     LaunchedEffect(fullScreen, active.id) {
@@ -443,13 +512,16 @@ fun DetailPlaybackScreen(
                         if (panel != FullPanel.NONE) {
                             if (panel == FullPanel.EPISODES) chooseEpisode(panelIndex) else chooseSource(panelIndex)
                         } else if (menuVisible) runAction(menuIndex)
-                        else if (player.playWhenReady) player.pause() else player.play()
+                        else togglePlayback()
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_DOWN -> {
                         if (panel != FullPanel.NONE) panelIndex = (panelIndex + GRID_COLUMNS).coerceAtMost(
                             if (panel == FullPanel.EPISODES) active.episodes.lastIndex else sources.lastIndex
-                        ) else if (!menuVisible) menuVisible = true
+                        ) else if (!menuVisible) {
+                            if (!actionEnabled(menuIndex)) menuIndex = 0
+                            menuVisible = true
+                        }
                         true
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
@@ -573,7 +645,8 @@ fun DetailPlaybackScreen(
                             PlaybackView(player, Modifier.fillMaxSize())
                             Text("确定 · 全屏播放", color = Color.White, modifier = Modifier.align(Alignment.BottomStart)
                                 .background(if (previewFocused) TvStyle.focusedSurface else Color(0x99000000)).padding(10.dp))
-                            if (loading) Text("正在测速并加载预览…", color = Color.White,
+                            if (loading || resolvingMedia || playWhenReady && playbackState == Player.STATE_BUFFERING) Text(
+                                if (loading) "正在测速并加载预览…" else "正在加载…", color = Color.White,
                                 modifier = Modifier.align(Alignment.Center).background(Color(0xBB000000)).padding(12.dp))
                             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9999),
                                 modifier = Modifier.align(Alignment.Center).background(Color(0xBB000000)).padding(12.dp))

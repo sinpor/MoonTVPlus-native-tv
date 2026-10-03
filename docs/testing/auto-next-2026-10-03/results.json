@@ -1,0 +1,50 @@
+[
+  {
+    "scenario": "small-and-last",
+    "status": "PASS"
+  },
+  {
+    "scenario": "fullscreen-episode-panel",
+    "status": "PASS"
+  },
+  {
+    "scenario": "fullscreen-source-panel",
+    "status": "PASS"
+  },
+  {
+    "scenario": "seek-end",
+    "status": "PASS"
+  },
+  {
+    "scenario": "failed-next",
+    "status": "PASS"
+  },
+  {
+    "scenario": "background-next-load",
+    "status": "PASS"
+  },
+  {
+    "scenario": "manual-override",
+    "status": "PASS"
+  },
+  {
+    "scenario": "background-current-pause",
+    "status": "PASS"
+  },
+  {
+    "scenario": "fullscreen-menu",
+    "status": "PASS"
+  },
+  {
+    "scenario": "immediate-exit-resume",
+    "status": "PASS"
+  },
+  {
+    "scenario": "layered-back",
+    "status": "PASS"
+  },
+  {
+    "scenario": "source-request-overridden",
+    "status": "PASS"
+  }
+]

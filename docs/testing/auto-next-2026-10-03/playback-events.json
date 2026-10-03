@@ -1,0 +1,982 @@
+[
+  {
+    "time": 1791013884.832743,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013884.832968,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791013885.207531,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013885.6431239,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791013894.692939,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 9
+  },
+  {
+    "time": 1791013904.6916978,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 19
+  },
+  {
+    "time": 1791013914.685527,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 29
+  },
+  {
+    "time": 1791013915.974463,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791013916.02249,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013916.196676,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791013926.0461981,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 9
+  },
+  {
+    "time": 1791013936.058645,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 19
+  },
+  {
+    "time": 1791013946.066474,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 29
+  },
+  {
+    "time": 1791013946.5167592,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 30
+  },
+  {
+    "time": 1791013946.552433,
+    "kind": "resolve",
+    "episode": 3,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013946.726398,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 0
+  },
+  {
+    "time": 1791013956.574251,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 9
+  },
+  {
+    "time": 1791013966.570004,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 19
+  },
+  {
+    "time": 1791013976.5799942,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 29
+  },
+  {
+    "time": 1791013977.010113,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  },
+  {
+    "time": 1791013987.6811361,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013987.681261,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791013988.017345,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791013988.296963,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 10
+  },
+  {
+    "time": 1791013997.490995,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 19
+  },
+  {
+    "time": 1791014007.495074,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 29
+  },
+  {
+    "time": 1791014008.612855,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014008.645688,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014008.823381,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014011.408374,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 2
+  },
+  {
+    "time": 1791014011.422955,
+    "kind": "resolve",
+    "episode": 3,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014011.554396,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 0
+  },
+  {
+    "time": 1791014019.755776,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014019.756644,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014020.079179,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014020.490974,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 15
+  },
+  {
+    "time": 1791014029.641362,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 24
+  },
+  {
+    "time": 1791014035.788661,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014035.805503,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014036.0599492,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014045.842418,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 9
+  },
+  {
+    "time": 1791014059.107662,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014059.108504,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014059.472852,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014059.827683,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 15
+  },
+  {
+    "time": 1791014068.9349492,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 24
+  },
+  {
+    "time": 1791014075.12932,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014075.139669,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014075.441935,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014078.034977,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 2
+  },
+  {
+    "time": 1791014078.1587899,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014078.566754,
+    "kind": "record",
+    "key": "fixture-b+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014086.1436532,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014086.14375,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014086.4723148,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014086.701971,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791014090.118579,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014090.128101,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014090.325187,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014098.135654,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014098.135783,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014098.4787252,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014098.884266,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 25
+  },
+  {
+    "time": 1791014104.2194612,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014104.239706,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014113.139551,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014113.320641,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014121.169067,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014121.169176,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014121.533603,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014122.004093,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 25
+  },
+  {
+    "time": 1791014127.341801,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014127.3548539,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014127.3549042,
+    "kind": "resolve-delay",
+    "episode": 2
+  },
+  {
+    "time": 1791014145.583613,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014147.355864,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 1
+  },
+  {
+    "time": 1791014153.550603,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014153.550944,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014153.9285,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014154.319509,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 25
+  },
+  {
+    "time": 1791014159.6622741,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014159.689589,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014159.6896331,
+    "kind": "resolve-delay",
+    "episode": 2
+  },
+  {
+    "time": 1791014164.755491,
+    "kind": "resolve",
+    "episode": 3,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014165.031032,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 0
+  },
+  {
+    "time": 1791014174.738718,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 9
+  },
+  {
+    "time": 1791014182.1518059,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014182.151928,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014182.493215,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014182.7433338,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791014186.02612,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 3
+  },
+  {
+    "time": 1791014191.9547288,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 3
+  },
+  {
+    "time": 1791014199.219959,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014201.976257,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014212.000153,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014221.9762812,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014231.9982662,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014241.984714,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014252.010858,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014262.007092,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 5
+  },
+  {
+    "time": 1791014277.453439,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014277.4540958,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014277.830849,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014278.2149189,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 15
+  },
+  {
+    "time": 1791014287.3198972,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 24
+  },
+  {
+    "time": 1791014293.4732301,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014293.501567,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014293.748288,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014296.292554,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 2
+  },
+  {
+    "time": 1791014296.3303301,
+    "kind": "resolve",
+    "episode": 3,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014296.4797509,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 0
+  },
+  {
+    "time": 1791014304.546531,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014304.5468109,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014304.8867142,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014305.097759,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791014309.2257679,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 4
+  },
+  {
+    "time": 1791014309.225989,
+    "kind": "source-delay",
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014320.262201,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014320.2624938,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014320.623326,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014321.102256,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 25
+  },
+  {
+    "time": 1791014326.4290812,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 30
+  },
+  {
+    "time": 1791014326.472966,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014326.623984,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014329.912056,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014329.9126909,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014330.285742,
+    "kind": "resolve",
+    "episode": 2,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014330.4884639,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 2,
+    "position": 0
+  },
+  {
+    "time": 1791014337.987975,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014337.988491,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014338.3025181,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014338.520826,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791014347.81676,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 9
+  },
+  {
+    "time": 1791014349.773772,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 11
+  },
+  {
+    "time": 1791014382.27949,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014382.2797198,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014382.64321,
+    "kind": "resolve",
+    "episode": 1,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014382.8484778,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 0
+  },
+  {
+    "time": 1791014386.752186,
+    "kind": "source-delay",
+    "source": "fixture-b"
+  },
+  {
+    "time": 1791014386.7522602,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 1,
+    "position": 3
+  },
+  {
+    "time": 1791014389.871213,
+    "kind": "resolve",
+    "episode": 3,
+    "source": "fixture-a"
+  },
+  {
+    "time": 1791014390.07516,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 0
+  },
+  {
+    "time": 1791014399.905662,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 9
+  },
+  {
+    "time": 1791014409.905788,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 19
+  },
+  {
+    "time": 1791014419.892137,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 29
+  },
+  {
+    "time": 1791014420.311609,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  },
+  {
+    "time": 1791014429.917026,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  },
+  {
+    "time": 1791014439.8968801,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  },
+  {
+    "time": 1791014449.937737,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  },
+  {
+    "time": 1791014459.9151978,
+    "kind": "record",
+    "key": "fixture-a+auto-next",
+    "index": 3,
+    "position": 30
+  }
+]
