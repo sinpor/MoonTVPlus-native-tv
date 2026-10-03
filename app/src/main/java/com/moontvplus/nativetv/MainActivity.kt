@@ -64,6 +64,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
@@ -474,23 +475,37 @@ private fun HomeVideoCard(api: MoonApi, item: VideoItem, metadata: String? = nul
 private fun SearchScreen(api: MoonApi, state: SearchState, onSelect: (VideoItem) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val queryFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
     var busy by remember { mutableStateOf(false) }
     var pendingCardFocus by remember { mutableStateOf(state.selectedIndex) }
     var pendingButtonFocus by remember { mutableStateOf(false) }
+    // The IME inset can remain true for a frame after hide(). Remember that a
+    // back press already dismissed it so a stale inset cannot swallow navigation.
+    var imeDismissed by remember { mutableStateOf(false) }
     val imeVisible = WindowInsets.isImeVisible
 
-    LaunchedEffect(pendingButtonFocus) {
-        if (pendingButtonFocus) {
-            delay(350)
-            searchFocus.requestFocus()
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) imeDismissed = false
+    }
+
+    LaunchedEffect(pendingButtonFocus, imeVisible) {
+        if (pendingButtonFocus && !imeVisible) {
+            withFrameNanos { }
+            if (busy || state.query.trim().isNotEmpty()) searchFocus.requestFocus()
             pendingButtonFocus = false
         }
     }
 
     BackHandler {
-        if (imeVisible) keyboard?.hide() else onBack()
+        if (imeVisible && !imeDismissed) {
+            imeDismissed = true
+            keyboard?.hide()
+            focusManager.clearFocus(force = true)
+        } else {
+            onBack()
+        }
     }
     LaunchedEffect(Unit) {
         // Only a new session opens the keyboard; returning from detail restores a card.
@@ -501,11 +516,13 @@ private fun SearchScreen(api: MoonApi, state: SearchState, onSelect: (VideoItem)
     }
 
     fun submitSearch() {
+        imeDismissed = true
         keyboard?.hide()
-        pendingButtonFocus = true
         val submitted = state.query.trim()
         if (submitted.isEmpty()) return
         if (busy) return
+        focusManager.clearFocus(force = true)
+        pendingButtonFocus = true
         busy = true
         state.results = emptyList()
         state.message = "搜索中…"

@@ -15,6 +15,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,7 +28,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
 /** Shared visual states for both native focus and the player's direction-key cursor. */
@@ -130,11 +133,27 @@ internal fun TvTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
     var focused by remember { mutableStateOf(false) }
+    // Keep the selection in Compose state instead of rebuilding a String-only
+    // field on every keystroke. This preserves the caret for TV remote editing.
+    var textFieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    LaunchedEffect(value) {
+        if (textFieldValue.text != value) {
+            textFieldValue = TextFieldValue(value, TextRange(value.length))
+        }
+    }
     val shape = RoundedCornerShape(6.dp)
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.onFocusChanged { focused = it.isFocused }.tvFocusBorder(focused, shape),
+        value = textFieldValue,
+        onValueChange = {
+            textFieldValue = it
+            onValueChange(it.text)
+        },
+        modifier = modifier.onFocusChanged {
+            if (it.isFocused && !focused) {
+                textFieldValue = textFieldValue.copy(selection = TextRange(textFieldValue.text.length))
+            }
+            focused = it.isFocused
+        }.tvFocusBorder(focused, shape),
         label = label,
         placeholder = placeholder,
         singleLine = singleLine,
